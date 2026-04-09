@@ -16,10 +16,12 @@ A double-entry accounting system that works for you.
 Talk to your books from the terminal.
 
 Get started:
-  cooked-books login          Authenticate with your API token
-  cooked-books context        Financial overview
-  cooked-books transactions   List transactions
-  cooked-books pnl            Profit & Loss report`,
+  cooked-books auth set-token <token>   Save your API token
+  cooked-books context                  Financial overview
+  cooked-books transactions             List transactions
+  cooked-books pnl                      Profit & Loss report
+
+Or set COOKED_BOOKS_TOKEN and skip auth entirely.`,
 }
 
 func Execute() {
@@ -30,7 +32,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(contextCmd)
 	rootCmd.AddCommand(transactionsCmd)
 	rootCmd.AddCommand(accountsCmd)
