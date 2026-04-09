@@ -23,9 +23,18 @@ type Config struct {
 }
 
 func NewClient() (*Client, error) {
+	// Environment variable takes priority
+	if token := os.Getenv("COOKED_BOOKS_TOKEN"); token != "" {
+		return &Client{
+			BaseURL: DefaultBaseURL(),
+			Token:   token,
+			HTTP:    &http.Client{},
+		}, nil
+	}
+
 	cfg, err := loadConfig()
 	if err != nil {
-		return nil, fmt.Errorf("not logged in. Run: cooked-books login")
+		return nil, fmt.Errorf("not logged in. Set COOKED_BOOKS_TOKEN or run: cooked-books login")
 	}
 
 	return &Client{
