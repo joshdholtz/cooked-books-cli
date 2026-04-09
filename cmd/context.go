@@ -17,9 +17,14 @@ var contextCmd = &cobra.Command{
 			return err
 		}
 
-		data, err := client.Get("/api/v1/copilot/context", nil)
+		resp, err := client.Get("/api/v1/copilot/context", nil)
 		if err != nil {
 			return err
+		}
+
+		data, _ := resp["data"].(map[string]any)
+		if data == nil {
+			return fmt.Errorf("unexpected response format")
 		}
 
 		bold := color.New(color.Bold)
@@ -28,57 +33,63 @@ var contextCmd = &cobra.Command{
 		value := color.New(color.FgGreen)
 		dim := color.New(color.FgHiBlack)
 
-		orgName := getString(data, "organization_name")
+		// Org name
+		orgName := ""
+		if org, ok := data["organization"].(map[string]any); ok {
+			orgName = getString(org, "name")
+		}
 		heading.Printf("%s — Financial Overview\n", orgName)
 		dim.Println("══════════════════════════════════════")
 		fmt.Println()
 
 		// Transaction counts
-		if txns, ok := data["transaction_counts"].(map[string]any); ok {
-			bold.Println("Transactions")
-			label.Print("  To review:    ")
-			value.Println(formatNum(txns["new"]))
-			label.Print("  AI suggested: ")
-			value.Println(formatNum(txns["suggested"]))
-			label.Print("  Reviewed:     ")
-			value.Println(formatNum(txns["reviewed"]))
-			label.Print("  Reconciled:   ")
-			value.Println(formatNum(txns["reconciled"]))
+		if summary, ok := data["summary"].(map[string]any); ok {
+			if txns, ok := summary["transactions"].(map[string]any); ok {
+				bold.Println("Transactions")
+				label.Print("  To review:    ")
+				value.Println(formatNum(txns["new"]))
+				label.Print("  AI suggested: ")
+				value.Println(formatNum(txns["suggested"]))
+				label.Print("  Reviewed:     ")
+				value.Println(formatNum(txns["reviewed"]))
+				label.Print("  Reconciled:   ")
+				value.Println(formatNum(txns["reconciled"]))
+				fmt.Println()
+			}
+		}
+
+		// Accounts overview
+		if accts, ok := data["accounts_overview"].(map[string]any); ok {
+			bold.Println("Accounts")
+			label.Print("  Cash balance:  ")
+			value.Println(formatMoney(accts["cash_balance"]))
+			label.Print("  Revenue YTD:   ")
+			value.Println(formatMoney(accts["total_revenue_ytd"]))
+			label.Print("  Expenses YTD:  ")
+			value.Println(formatMoney(accts["total_expenses_ytd"]))
+			label.Print("  Net income:    ")
+			value.Println(formatMoney(accts["net_income_ytd"]))
 			fmt.Println()
 		}
 
-		// P&L summary
-		if pnl, ok := data["profit_and_loss"].(map[string]any); ok {
-			bold.Println("Profit & Loss (YTD)")
-			label.Print("  Revenue:  ")
-			value.Println(formatMoney(pnl["total_revenue"]))
-			label.Print("  Expenses: ")
-			value.Println(formatMoney(pnl["total_expenses"]))
-			label.Print("  Net:      ")
-			net := formatMoney(pnl["net_income"])
-			if getString(pnl, "net_income") != "" {
-				value.Println(net)
-			} else {
-				fmt.Println(net)
+		// Available actions
+		if actions, ok := data["available_actions"].([]any); ok && len(actions) > 0 {
+			bold.Println("Action Items")
+			for _, a := range actions {
+				action, ok := a.(map[string]any)
+				if !ok {
+					continue
+				}
+				priority := getString(action, "priority")
+				desc := getString(action, "description")
+				marker := "  ·"
+				if priority == "high" {
+					marker = "  !"
+				}
+				label.Print(marker + " ")
+				fmt.Println(desc)
 			}
 			fmt.Println()
-		}
-
-		// Cash balance
-		if bs, ok := data["balance_sheet"].(map[string]any); ok {
-			bold.Println("Balance Sheet")
-			label.Print("  Assets:      ")
-			value.Println(formatMoney(bs["total_assets"]))
-			label.Print("  Liabilities: ")
-			value.Println(formatMoney(bs["total_liabilities"]))
-			label.Print("  Equity:      ")
-			value.Println(formatMoney(bs["total_equity"]))
-			fmt.Println()
-		}
-
-		// Pending rules
-		if rules, ok := data["pending_rules"].(float64); ok && rules > 0 {
-			label.Printf("  %d rule proposals ready to review\n", int(rules))
 		}
 
 		return nil
@@ -112,6 +123,9 @@ func formatMoney(v any) string {
 	case float64:
 		return fmt.Sprintf("$%.2f", n)
 	case string:
+		if n == "" {
+			return "$0.00"
+		}
 		return "$" + n
 	default:
 		return fmt.Sprintf("$%v", v)

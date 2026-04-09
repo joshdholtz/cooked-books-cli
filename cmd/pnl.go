@@ -38,9 +38,14 @@ var pnlCmd = &cobra.Command{
 			"end_date":   pnlEnd,
 		}
 
-		data, err := client.Get("/api/v1/reports/profit-and-loss", params)
+		resp, err := client.Get("/api/v1/reports/profit-and-loss", params)
 		if err != nil {
 			return err
+		}
+
+		data, _ := resp["data"].(map[string]any)
+		if data == nil {
+			return fmt.Errorf("unexpected response format")
 		}
 
 		bold := color.New(color.Bold)
@@ -50,26 +55,48 @@ var pnlCmd = &cobra.Command{
 		dim.Println("══════════════════════════════════════")
 		fmt.Println()
 
-		report, _ := data["data"].(map[string]any)
+		rows, _ := data["rows"].([]any)
 
-		// Revenue
-		printSection("Revenue", report, "revenue")
-		printSection("Expenses", report, "expenses")
+		// Split into revenue and expenses
+		var revenue, expenses []map[string]any
+		var totalRevenue, totalExpenses float64
+
+		for _, r := range rows {
+			row, ok := r.(map[string]any)
+			if !ok {
+				continue
+			}
+			typ := getString(row, "type")
+			credits := parseFloat(getString(row, "total_credits"))
+			debits := parseFloat(getString(row, "total_debits"))
+
+			if typ == "revenue" {
+				revenue = append(revenue, row)
+				totalRevenue += credits - debits
+			} else if typ == "expense" {
+				expenses = append(expenses, row)
+				totalExpenses += debits - credits
+			}
+		}
+
+		printPnlSection("Revenue", revenue, totalRevenue, true)
+		printPnlSection("Expenses", expenses, totalExpenses, false)
 
 		fmt.Println()
-		bold.Printf("  Net Income: %s\n", formatMoney(report["net_income"]))
+		net := totalRevenue - totalExpenses
+		bold.Printf("  Net Income: $%.2f\n", net)
 
 		return nil
 	},
 }
 
-func printSection(title string, report map[string]any, key string) {
+func printPnlSection(title string, rows []map[string]any, total float64, isRevenue bool) {
 	bold := color.New(color.Bold)
 	bold.Println(title)
 
-	items, ok := report[key].([]any)
-	if !ok || len(items) == 0 {
+	if len(rows) == 0 {
 		fmt.Println("  (none)")
+		fmt.Println()
 		return
 	}
 
@@ -80,22 +107,29 @@ func printSection(title string, report map[string]any, key string) {
 	table.SetAutoWrapText(false)
 	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_RIGHT})
 
-	for _, item := range items {
-		row, ok := item.(map[string]any)
-		if !ok {
+	for _, row := range rows {
+		name := getString(row, "name")
+		var amount float64
+		if isRevenue {
+			amount = parseFloat(getString(row, "total_credits")) - parseFloat(getString(row, "total_debits"))
+		} else {
+			amount = parseFloat(getString(row, "total_debits")) - parseFloat(getString(row, "total_credits"))
+		}
+		if amount == 0 {
 			continue
 		}
-		name := getString(row, "account_name")
-		amount := formatMoney(row["total"])
-		table.Append([]string{"  " + name, amount})
+		table.Append([]string{"  " + name, fmt.Sprintf("$%.2f", amount)})
 	}
 
-	if total, ok := report["total_"+key]; ok {
-		table.SetFooter([]string{"  Total " + title, formatMoney(total)})
-	}
-
+	table.SetFooter([]string{"  Total " + title, fmt.Sprintf("$%.2f", total)})
 	table.Render()
 	fmt.Println()
+}
+
+func parseFloat(s string) float64 {
+	var f float64
+	fmt.Sscanf(s, "%f", &f)
+	return f
 }
 
 func init() {

@@ -31,19 +31,19 @@ var transactionsCmd = &cobra.Command{
 			"limit":  txnLimit,
 		}
 
-		data, err := client.Get("/api/v1/transactions", params)
+		resp, err := client.Get("/api/v1/transactions", params)
 		if err != nil {
 			return err
 		}
 
-		transactions, ok := data["data"].([]any)
+		transactions, ok := resp["data"].([]any)
 		if !ok || len(transactions) == 0 {
 			fmt.Println("No transactions found.")
 			return nil
 		}
 
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Date", "Description", "Amount", "Account", "Status"})
+		table.SetHeader([]string{"Date", "Description", "Amount", "Status"})
 		table.SetBorder(false)
 		table.SetColumnSeparator("")
 		table.SetHeaderLine(false)
@@ -56,17 +56,13 @@ var transactionsCmd = &cobra.Command{
 
 			date := getString(txn, "date")
 			desc := getString(txn, "description")
-			if len(desc) > 40 {
-				desc = desc[:37] + "..."
+			if len(desc) > 45 {
+				desc = desc[:42] + "..."
 			}
 			amount := formatMoney(txn["amount"])
-			account := getString(txn, "category_account_name")
-			if account == "" {
-				account = "—"
-			}
 			status := getString(txn, "status")
 
-			table.Append([]string{date, desc, amount, account, status})
+			table.Append([]string{date, desc, amount, status})
 		}
 
 		table.Render()
