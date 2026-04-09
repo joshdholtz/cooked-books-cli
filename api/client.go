@@ -11,6 +11,9 @@ import (
 	"strings"
 )
 
+// ConfigDirOverride allows tests to use a temp directory
+var ConfigDirOverride string
+
 type Client struct {
 	BaseURL string
 	Token   string
@@ -32,9 +35,9 @@ func NewClient() (*Client, error) {
 		}, nil
 	}
 
-	cfg, err := loadConfig()
+	cfg, err := LoadConfig()
 	if err != nil {
-		return nil, fmt.Errorf("not logged in. Set COOKED_BOOKS_TOKEN or run: cooked-books login")
+		return nil, fmt.Errorf("not logged in. Set COOKED_BOOKS_TOKEN or run: cooked-books auth set-token")
 	}
 
 	return &Client{
@@ -70,7 +73,7 @@ func (c *Client) Get(path string, params map[string]string) (map[string]any, err
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("unauthorized. Run: cooked-books login")
+		return nil, fmt.Errorf("unauthorized. Run: cooked-books auth set-token")
 	}
 	if resp.StatusCode == 403 {
 		return nil, fmt.Errorf("forbidden: %s", string(body))
@@ -107,7 +110,7 @@ func (c *Client) Post(path string, payload map[string]any) (map[string]any, erro
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("unauthorized. Run: cooked-books login")
+		return nil, fmt.Errorf("unauthorized. Run: cooked-books auth set-token")
 	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
@@ -121,16 +124,19 @@ func (c *Client) Post(path string, payload map[string]any) (map[string]any, erro
 	return result, nil
 }
 
-func configDir() string {
+func ConfigDir() string {
+	if ConfigDirOverride != "" {
+		return ConfigDirOverride
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "cooked-books")
 }
 
 func configPath() string {
-	return filepath.Join(configDir(), "config.json")
+	return filepath.Join(ConfigDir(), "config.json")
 }
 
-func loadConfig() (*Config, error) {
+func LoadConfig() (*Config, error) {
 	data, err := os.ReadFile(configPath())
 	if err != nil {
 		return nil, err
@@ -149,7 +155,7 @@ func loadConfig() (*Config, error) {
 }
 
 func SaveConfig(cfg *Config) error {
-	if err := os.MkdirAll(configDir(), 0700); err != nil {
+	if err := os.MkdirAll(ConfigDir(), 0700); err != nil {
 		return err
 	}
 
